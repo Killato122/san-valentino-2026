@@ -43,9 +43,10 @@
     <main id="main-app" class="hidden" aria-hidden="true">
         <section class="mosaic-section">
             <h2 class="section-title">Il Nostro Mosaico</h2>
-            <div class="mosaic-wrapper">
+            <div class="mosaic-wrapper" id="mosaic-trigger" role="button" tabindex="0" aria-label="Apri il mosaico a schermo intero">
                 <img src="assets/images/foto_mosaico.jpg" alt="Il nostro mosaico di ricordi">
             </div>
+            <p class="mosaic-zoom-hint">Tocca il mosaico per aprirlo e fare zoom.</p>
             <p class="mosaic-caption">Ogni pezzetto, un ricordo. Insieme, la nostra storia.</p>
         </section>
 
@@ -77,6 +78,14 @@
         </section>
     </main>
 
+    <div id="mosaic-lightbox" class="mosaic-lightbox hidden" aria-hidden="true">
+        <button id="close-mosaic-zoom" class="mosaic-close-button" type="button" aria-label="Chiudi mosaico">Chiudi</button>
+        <div id="mosaic-zoom-viewport" class="mosaic-zoom-viewport">
+            <img id="mosaic-zoom-image" src="" alt="">
+        </div>
+        <p class="mosaic-lightbox-tip">Pinch per zoom, trascina con un dito per muoverti.</p>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const SECRET_DATE = { day: "13", month: "04", year: "2024" };
@@ -86,10 +95,10 @@
 
         const memories = [
             { coords: [41.9028, 12.4964], title: "Roma", desc: "Dove tutto e iniziato.", img: "assets/images/foto_roma.jpg" },
-            { coords: [38.1157, 13.3615], title: "Palermo", desc: "Tra sole, mare e meraviglie.", img: "assets/images/foto_palermo.HEIC" },
-            { coords: [40.8518, 14.2681], title: "Napoli", desc: "Pizza, mare e noi.", img: "assets/images/foto_napoli.HEIC" },
-            { coords: [28.2916, -16.6291], title: "Tenerife", desc: "Avventura vulcanica.", img: "assets/images/foto_tenerife.HEIC" },
-            { coords: [37.4467, 25.3289], title: "Mykonos", desc: "Tramonti e vento.", img: "assets/images/foto_mykonos.HEIC" },
+            { coords: [38.1157, 13.3615], title: "Palermo", desc: "Tra sole, mare e meraviglie.", img: "assets/images/foto_palermo.jpg" },
+            { coords: [40.8518, 14.2681], title: "Napoli", desc: "Pizza, mare e noi.", img: "assets/images/foto_napoli.jpg" },
+            { coords: [28.2916, -16.6291], title: "Tenerife", desc: "Avventura vulcanica.", img: "assets/images/foto_tenerife.jpg" },
+            { coords: [37.4467, 25.3289], title: "Mykonos", desc: "Tramonti e vento.", img: "assets/images/foto_mykonos.jpg" },
             { coords: [47.4979, 19.0402], title: "Budapest", desc: "Terme e Danubio.", img: "assets/images/foto_budapest.jpg" },
             { coords: [52.3676, 4.9041], title: "Amsterdam", desc: "Prossima fermata! Non vedo l'ora.", img: "assets/images/foto_olanda.jpg", isFuture: true }
         ];
@@ -212,14 +221,28 @@
         const noteCounter = document.getElementById("love-note-counter");
         const noteText = document.getElementById("love-note-text");
         const newNoteButton = document.getElementById("new-note-button");
+        const mosaicTrigger = document.getElementById("mosaic-trigger");
+        const mosaicSourceImage = document.querySelector("#mosaic-trigger img");
+        const mosaicLightbox = document.getElementById("mosaic-lightbox");
+        const closeMosaicZoomButton = document.getElementById("close-mosaic-zoom");
+        const mosaicZoomViewport = document.getElementById("mosaic-zoom-viewport");
+        const mosaicZoomImage = document.getElementById("mosaic-zoom-image");
 
         let mapInitialized = false;
         let musicStarted = false;
-        let reasonDeck = [];
-        let cyclePosition = 0;
-        let isTypingReason = false;
-        let typewriterTimeoutId = null;
-        let isLetterDataReady = true;
+        let reasonPool = [];
+        let reasonNumber = 0;
+        let isTyping = false;
+        let typingTimeout = null;
+        let mosaicScale = 1;
+        let mosaicTranslateX = 0;
+        let mosaicTranslateY = 0;
+        let isMosaicPanning = false;
+        let panStartX = 0;
+        let panStartY = 0;
+        let pinchStartDistance = 0;
+        let pinchStartScale = 1;
+        const activeMosaicPointers = new Map();
 
         function createFloatingHearts() {
             const heartContainer = document.getElementById("bg-hearts");
@@ -342,7 +365,7 @@
                 && enteredDate.year === SECRET_DATE.year;
 
             if (!isCorrectDate) {
-                msg.textContent = "Data errata, ti tiro un pugnooo";
+                msg.textContent = "Data errata, riprova amore.";
                 msg.className = "access-denied";
                 loginBox.classList.add("shake");
                 setTimeout(() => loginBox.classList.remove("shake"), 400);
@@ -379,30 +402,29 @@
         }
 
         function refillReasonDeck() {
-            reasonDeck = Array.from({ length: LOVE_REASONS.length }, (_, index) => index);
-            shuffleArray(reasonDeck);
-            cyclePosition = 0;
+            reasonPool = Array.from({ length: LOVE_REASONS.length }, (_, index) => index);
+            shuffleArray(reasonPool);
+            reasonNumber = 0;
         }
 
-        function showLetterFallback() {
-            isLetterDataReady = false;
+        function showReasonsFallback() {
             noteCounter.textContent = "Motivo - di 100";
             noteText.textContent = "Sto preparando i motivi...";
             newNoteButton.disabled = true;
         }
 
-        function writeReasonWithTypewriter(reason) {
-            if (typewriterTimeoutId !== null) {
-                clearTimeout(typewriterTimeoutId);
-                typewriterTimeoutId = null;
+        function typeReason(reason) {
+            if (typingTimeout !== null) {
+                clearTimeout(typingTimeout);
+                typingTimeout = null;
             }
 
-            isTypingReason = true;
+            isTyping = true;
             newNoteButton.disabled = true;
             noteText.textContent = "";
 
             if (!reason) {
-                isTypingReason = false;
+                isTyping = false;
                 newNoteButton.disabled = false;
                 return;
             }
@@ -413,48 +435,224 @@
                 cursor += 1;
 
                 if (cursor < reason.length) {
-                    typewriterTimeoutId = setTimeout(typeNext, TYPEWRITER_DELAY_MS);
+                    typingTimeout = setTimeout(typeNext, TYPEWRITER_DELAY_MS);
                     return;
                 }
 
-                typewriterTimeoutId = null;
-                isTypingReason = false;
+                typingTimeout = null;
+                isTyping = false;
                 newNoteButton.disabled = false;
             };
 
             typeNext();
         }
 
-        function showNextLoveReason() {
-            if (!isLetterDataReady || isTypingReason) {
+        function showNextReason() {
+            if (isTyping || newNoteButton.disabled) {
                 return;
             }
 
-            if (reasonDeck.length === 0) {
+            if (reasonPool.length === 0) {
                 refillReasonDeck();
             }
 
-            const reasonIndex = reasonDeck.pop();
-            cyclePosition += 1;
+            const reasonIndex = reasonPool.pop();
+            reasonNumber += 1;
 
-            noteCounter.textContent = `Motivo ${cyclePosition} di ${LOVE_REASONS.length}`;
-            writeReasonWithTypewriter(LOVE_REASONS[reasonIndex]);
+            noteCounter.textContent = `Motivo ${reasonNumber} di ${LOVE_REASONS.length}`;
+            typeReason(LOVE_REASONS[reasonIndex]);
         }
 
-        function initLoveLetter() {
+        function initReasonsLetter() {
             if (!Array.isArray(LOVE_REASONS) || LOVE_REASONS.length !== 100) {
                 const foundLength = Array.isArray(LOVE_REASONS) ? LOVE_REASONS.length : "invalid";
                 console.error(`LOVE_REASONS must contain exactly 100 items. Found: ${foundLength}`);
-                showLetterFallback();
+                showReasonsFallback();
                 return;
             }
 
-            isLetterDataReady = true;
             refillReasonDeck();
-            showNextLoveReason();
+            showNextReason();
         }
 
-        newNoteButton.addEventListener("click", showNextLoveReason);
+        newNoteButton.addEventListener("click", showNextReason);
+
+        function clampValue(value, minValue, maxValue) {
+            return Math.min(maxValue, Math.max(minValue, value));
+        }
+
+        function getPinchDistance(pointA, pointB) {
+            const dx = pointA.x - pointB.x;
+            const dy = pointA.y - pointB.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function getMosaicPanLimits() {
+            const baseWidth = mosaicZoomImage.offsetWidth;
+            const baseHeight = mosaicZoomImage.offsetHeight;
+            const maxX = Math.max(0, (baseWidth * mosaicScale - baseWidth) / 2);
+            const maxY = Math.max(0, (baseHeight * mosaicScale - baseHeight) / 2);
+            return { maxX, maxY };
+        }
+
+        function applyMosaicTransform() {
+            if (mosaicScale <= 1) {
+                mosaicTranslateX = 0;
+                mosaicTranslateY = 0;
+            } else {
+                const { maxX, maxY } = getMosaicPanLimits();
+                mosaicTranslateX = clampValue(mosaicTranslateX, -maxX, maxX);
+                mosaicTranslateY = clampValue(mosaicTranslateY, -maxY, maxY);
+            }
+            mosaicZoomImage.style.transform = `translate(${mosaicTranslateX}px, ${mosaicTranslateY}px) scale(${mosaicScale})`;
+        }
+
+        function setMosaicScale(nextScale) {
+            mosaicScale = clampValue(nextScale, 1, 4);
+            applyMosaicTransform();
+        }
+
+        function resetMosaicZoomState() {
+            mosaicScale = 1;
+            mosaicTranslateX = 0;
+            mosaicTranslateY = 0;
+            isMosaicPanning = false;
+            activeMosaicPointers.clear();
+            applyMosaicTransform();
+        }
+
+        function openMosaicZoom() {
+            if (!mosaicSourceImage || !mosaicLightbox) {
+                return;
+            }
+
+            mosaicZoomImage.src = mosaicSourceImage.currentSrc || mosaicSourceImage.src;
+            mosaicZoomImage.alt = mosaicSourceImage.alt;
+            resetMosaicZoomState();
+
+            mosaicLightbox.classList.remove("hidden");
+            requestAnimationFrame(() => {
+                mosaicLightbox.classList.add("visible");
+                mosaicLightbox.setAttribute("aria-hidden", "false");
+            });
+            document.body.classList.add("lock-scroll");
+        }
+
+        function closeMosaicZoom() {
+            if (!mosaicLightbox || mosaicLightbox.classList.contains("hidden")) {
+                return;
+            }
+
+            mosaicLightbox.classList.remove("visible");
+            mosaicLightbox.setAttribute("aria-hidden", "true");
+            window.setTimeout(() => {
+                mosaicLightbox.classList.add("hidden");
+            }, 180);
+            document.body.classList.remove("lock-scroll");
+            resetMosaicZoomState();
+        }
+
+        function setupMosaicZoom() {
+            if (!mosaicTrigger || !mosaicLightbox || !mosaicZoomViewport || !mosaicZoomImage || !closeMosaicZoomButton) {
+                return;
+            }
+
+            mosaicTrigger.addEventListener("click", openMosaicZoom);
+            mosaicTrigger.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openMosaicZoom();
+                }
+            });
+
+            closeMosaicZoomButton.addEventListener("click", closeMosaicZoom);
+            mosaicLightbox.addEventListener("click", (event) => {
+                if (event.target === mosaicLightbox) {
+                    closeMosaicZoom();
+                }
+            });
+
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && mosaicLightbox.classList.contains("visible")) {
+                    closeMosaicZoom();
+                }
+            });
+
+            mosaicZoomViewport.addEventListener("wheel", (event) => {
+                event.preventDefault();
+                const step = event.deltaY < 0 ? 0.2 : -0.2;
+                setMosaicScale(mosaicScale + step);
+            }, { passive: false });
+
+            mosaicZoomViewport.addEventListener("dblclick", () => {
+                if (mosaicScale > 1) {
+                    setMosaicScale(1);
+                    return;
+                }
+                setMosaicScale(2);
+            });
+
+            mosaicZoomViewport.addEventListener("pointerdown", (event) => {
+                activeMosaicPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+                mosaicZoomViewport.setPointerCapture(event.pointerId);
+
+                if (activeMosaicPointers.size === 1) {
+                    isMosaicPanning = mosaicScale > 1;
+                    panStartX = event.clientX - mosaicTranslateX;
+                    panStartY = event.clientY - mosaicTranslateY;
+                }
+
+                if (activeMosaicPointers.size === 2) {
+                    const points = Array.from(activeMosaicPointers.values());
+                    pinchStartDistance = getPinchDistance(points[0], points[1]) || 1;
+                    pinchStartScale = mosaicScale;
+                    isMosaicPanning = false;
+                }
+            });
+
+            mosaicZoomViewport.addEventListener("pointermove", (event) => {
+                if (!activeMosaicPointers.has(event.pointerId)) {
+                    return;
+                }
+
+                activeMosaicPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+                if (activeMosaicPointers.size === 2) {
+                    event.preventDefault();
+                    const points = Array.from(activeMosaicPointers.values());
+                    const currentDistance = getPinchDistance(points[0], points[1]);
+                    const distanceRatio = currentDistance / (pinchStartDistance || 1);
+                    setMosaicScale(pinchStartScale * distanceRatio);
+                    return;
+                }
+
+                if (activeMosaicPointers.size === 1 && isMosaicPanning) {
+                    event.preventDefault();
+                    mosaicTranslateX = event.clientX - panStartX;
+                    mosaicTranslateY = event.clientY - panStartY;
+                    applyMosaicTransform();
+                }
+            });
+
+            const endPointerInteraction = (event) => {
+                if (activeMosaicPointers.has(event.pointerId)) {
+                    activeMosaicPointers.delete(event.pointerId);
+                }
+
+                if (activeMosaicPointers.size === 1) {
+                    const remainingPoint = Array.from(activeMosaicPointers.values())[0];
+                    isMosaicPanning = mosaicScale > 1;
+                    panStartX = remainingPoint.x - mosaicTranslateX;
+                    panStartY = remainingPoint.y - mosaicTranslateY;
+                } else {
+                    isMosaicPanning = false;
+                }
+            };
+
+            mosaicZoomViewport.addEventListener("pointerup", endPointerInteraction);
+            mosaicZoomViewport.addEventListener("pointercancel", endPointerInteraction);
+            mosaicZoomViewport.addEventListener("pointerleave", endPointerInteraction);
+        }
 
         function updateTimer() {
             const now = new Date();
@@ -517,7 +715,9 @@
         createFloatingHearts();
         setupDateInputs();
         setupMusic();
-        initLoveLetter();
+        initReasonsLetter();
+        setupMosaicZoom();
     </script>
 </body>
 </html>
+

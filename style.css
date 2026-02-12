@@ -21,6 +21,10 @@ body {
     min-height: 100vh;
 }
 
+body.lock-scroll {
+    overflow: hidden;
+}
+
 .hidden {
     display: none;
 }
@@ -272,6 +276,7 @@ body {
     overflow: hidden;
     box-shadow: var(--box-shadow);
     border: 5px solid #fff;
+    cursor: zoom-in;
 }
 
 .mosaic-wrapper img {
@@ -284,6 +289,72 @@ body {
     font-size: 2rem;
     color: var(--accent-color);
     margin-top: 28px;
+}
+
+.mosaic-zoom-hint {
+    margin-top: 6px;
+    font-size: 0.9rem;
+    color: #b45c7e;
+    letter-spacing: 0.01em;
+}
+
+.mosaic-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    background: rgba(20, 10, 15, 0.92);
+    backdrop-filter: blur(3px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+    padding: 18px;
+}
+
+.mosaic-lightbox.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.mosaic-close-button {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    padding: 10px 15px;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.mosaic-zoom-viewport {
+    width: min(94vw, 1100px);
+    max-height: 82vh;
+    overflow: hidden;
+    border-radius: 16px;
+    touch-action: none;
+    user-select: none;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+#mosaic-zoom-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    transform-origin: center center;
+    will-change: transform;
+}
+
+.mosaic-lightbox-tip {
+    margin-top: 14px;
+    color: #f7d7e3;
+    font-size: 0.92rem;
 }
 
 .hero-section {
@@ -529,6 +600,28 @@ body {
 
     .mosaic-caption {
         font-size: 1.6rem;
+    }
+
+    .mosaic-zoom-hint {
+        font-size: 0.84rem;
+        margin-top: 2px;
+    }
+
+    .mosaic-zoom-viewport {
+        width: 96vw;
+        max-height: 78vh;
+        border-radius: 12px;
+    }
+
+    .mosaic-close-button {
+        top: 10px;
+        right: 10px;
+        padding: 9px 12px;
+        font-size: 0.9rem;
+    }
+
+    .mosaic-lightbox-tip {
+        font-size: 0.82rem;
     }
 
     .map-wrapper {
