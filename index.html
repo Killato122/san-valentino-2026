@@ -1,0 +1,523 @@
+﻿<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Per Noi - San Valentino 2026</title>
+    <meta name="description" content="Una pagina speciale per San Valentino con timer, musica e i nostri ricordi.">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Montserrat:wght@300;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <audio id="bg-music" loop preload="auto">
+        <source src="assets/audio/musica.mp3" type="audio/mpeg">
+    </audio>
+    <button id="music-toggle" class="music-toggle hidden" type="button" aria-label="Controlla musica">Pausa musica</button>
+
+    <div class="bg-hearts" id="bg-hearts"></div>
+
+    <div id="intro-overlay">
+        <div class="login-box" id="login-box">
+            <div class="login-title">Benvenuta amore mio</div>
+            <p class="login-intro">Inserisci la nostra data speciale per entrare.</p>
+
+            <form id="login-form" novalidate>
+                <label class="date-label" for="day-input">Data di anniversario (GG/MM/AAAA)</label>
+                <div class="date-input-row" aria-label="Inserisci data speciale">
+                    <input type="text" id="day-input" maxlength="2" inputmode="numeric" autocomplete="off" placeholder="GG" aria-label="Giorno" autofocus>
+                    <span class="date-separator">/</span>
+                    <input type="text" id="month-input" maxlength="2" inputmode="numeric" autocomplete="off" placeholder="MM" aria-label="Mese">
+                    <span class="date-separator">/</span>
+                    <input type="text" id="year-input" maxlength="4" inputmode="numeric" autocomplete="off" placeholder="AAAA" aria-label="Anno">
+                </div>
+                <button id="login-button" type="submit">Entra</button>
+            </form>
+
+            <div id="access-msg" role="status" aria-live="polite"></div>
+            <p id="audio-hint" class="audio-hint hidden">Se la musica non parte da sola, tocca lo schermo.</p>
+        </div>
+    </div>
+
+    <main id="main-app" class="hidden" aria-hidden="true">
+        <section class="mosaic-section">
+            <h2 class="section-title">Il Nostro Mosaico</h2>
+            <div class="mosaic-wrapper">
+                <img src="assets/images/foto_mosaico.jpg" alt="Il nostro mosaico di ricordi">
+            </div>
+            <p class="mosaic-caption">Ogni pezzetto, un ricordo. Insieme, la nostra storia.</p>
+        </section>
+
+        <section class="hero-section">
+            <h1 class="main-title">La Durata della nostra Storia</h1>
+            <p class="subtitle">Ogni secondo e piu bello con te.</p>
+
+            <div id="timer-container" aria-label="Timer di coppia">
+                <div class="time-box"><span id="days" class="time-value">000</span><span class="time-label">Giorni</span></div>
+                <div class="time-box"><span id="hours" class="time-value">00</span><span class="time-label">Ore</span></div>
+                <div class="time-box"><span id="minutes" class="time-value">00</span><span class="time-label">Min</span></div>
+                <div class="time-box"><span id="seconds" class="time-value">00</span><span class="time-label">Sec</span></div>
+            </div>
+
+            <div class="love-note-card" aria-live="polite">
+                <h3 class="letter-title">100 motivi per cui ti amo</h3>
+                <p id="love-note-counter">Motivo 0 di 100</p>
+                <p id="love-note-text"></p>
+                <button id="new-note-button" type="button">Apri un altro motivo</button>
+                <p class="letter-signature">Con amore, il tuo Michael</p>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="section-title">I Nostri Viaggi nel Mondo</h2>
+            <div class="map-wrapper">
+                <div id="map"></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const SECRET_DATE = { day: "13", month: "04", year: "2024" };
+        const START_DATE = new Date("2024-04-13T00:00:00");
+        const HEART_COUNT = 18;
+        const MUSIC_VOLUME = 0.45;
+
+        const memories = [
+            { coords: [41.9028, 12.4964], title: "Roma", desc: "Dove tutto e iniziato.", img: "assets/images/foto_roma.jpg" },
+            { coords: [38.1157, 13.3615], title: "Palermo", desc: "Tra sole, mare e meraviglie.", img: "assets/images/foto_palermo.HEIC" },
+            { coords: [40.8518, 14.2681], title: "Napoli", desc: "Pizza, mare e noi.", img: "assets/images/foto_napoli.HEIC" },
+            { coords: [28.2916, -16.6291], title: "Tenerife", desc: "Avventura vulcanica.", img: "assets/images/foto_tenerife.HEIC" },
+            { coords: [37.4467, 25.3289], title: "Mykonos", desc: "Tramonti e vento.", img: "assets/images/foto_mykonos.HEIC" },
+            { coords: [47.4979, 19.0402], title: "Budapest", desc: "Terme e Danubio.", img: "assets/images/foto_budapest.jpg" },
+            { coords: [52.3676, 4.9041], title: "Amsterdam", desc: "Prossima fermata! Non vedo l'ora.", img: "assets/images/foto_olanda.jpg", isFuture: true }
+        ];
+
+        const TYPEWRITER_DELAY_MS = 20;
+        const LOVE_REASONS = [
+            "Perche con te anche il lunedi ha un senso.",
+            "Perche il tuo sorriso cambia la mia giornata.",
+            "Perche mi fai sentire visto davvero.",
+            "Perche sai ascoltarmi fino in fondo.",
+            "Perche con te posso essere me stesso.",
+            "Perche rendi leggere anche le cose difficili.",
+            "Perche la tua voce mi calma subito.",
+            "Perche mi fai ridere quando ne ho bisogno.",
+            "Perche hai un cuore enorme.",
+            "Perche mi sorprendi con piccoli gesti.",
+            "Perche hai pazienza con i miei difetti.",
+            "Perche credi in noi ogni giorno.",
+            "Perche con te il tempo vola.",
+            "Perche con te anche il silenzio e bello.",
+            "Perche mi fai sentire a casa ovunque.",
+            "Perche sai trasformare un giorno normale in un ricordo.",
+            "Perche mi guardi con dolcezza.",
+            "Perche rispetti i miei tempi.",
+            "Perche mi incoraggi senza giudicarmi.",
+            "Perche mi fai venire voglia di migliorare.",
+            "Perche ogni tuo abbraccio e un rifugio.",
+            "Perche sai essere forte e tenera insieme.",
+            "Perche con te condivido tutto.",
+            "Perche capisci i miei sguardi.",
+            "Perche hai un modo unico di prenderti cura di me.",
+            "Perche la tua energia mi accende.",
+            "Perche la tua risata e la mia colonna sonora preferita.",
+            "Perche sai trovare bellezza nelle cose semplici.",
+            "Perche rendi speciale ogni caffe insieme.",
+            "Perche con te i viaggi sono avventura vera.",
+            "Perche anche fare la spesa con te e divertente.",
+            "Perche ti emozioni per le cose giuste.",
+            "Perche sai chiedere scusa con sincerita.",
+            "Perche sai perdonare con il cuore.",
+            "Perche mi fai sentire importante.",
+            "Perche non smetti mai di sorprendermi.",
+            "Perche con te i sogni sembrano possibili.",
+            "Perche sei la mia persona preferita.",
+            "Perche sai essere ironica al momento giusto.",
+            "Perche mi fai sentire fortunato.",
+            "Perche mi sostieni anche quando dubito.",
+            "Perche ami con coraggio.",
+            "Perche con te parlo di tutto senza paura.",
+            "Perche mi fai sentire al sicuro.",
+            "Perche hai una dolcezza rara.",
+            "Perche sai anche farmi tornare con i piedi per terra.",
+            "Perche hai occhi pieni di vita.",
+            "Perche sai festeggiare ogni piccola vittoria.",
+            "Perche con te il futuro mi piace di piu.",
+            "Perche ogni giorno con te vale doppio.",
+            "Perche sai mettere ordine nel mio caos.",
+            "Perche non ti arrendi facilmente.",
+            "Perche mi scegli ogni giorno.",
+            "Perche sei presente davvero.",
+            "Perche ami con profondita.",
+            "Perche sai quando parlare e quando abbracciare.",
+            "Perche mi fai sentire compreso.",
+            "Perche con te posso ridere di me.",
+            "Perche anche nei litigi cerchi sempre noi.",
+            "Perche mi fai sentire migliore.",
+            "Perche la tua sensibilita e preziosa.",
+            "Perche hai una forza tranquilla.",
+            "Perche sai rendere romantico l'ordinario.",
+            "Perche con te ogni tramonto e piu bello.",
+            "Perche sei curiosa della vita.",
+            "Perche mi fai scoprire cose nuove.",
+            "Perche mi fai sentire amato senza condizioni.",
+            "Perche mi ispiri fiducia.",
+            "Perche sei autentica.",
+            "Perche sai prenderti cura anche dei dettagli.",
+            "Perche con te i piani cambiano e migliorano.",
+            "Perche mi fai venire voglia di tornare sempre da te.",
+            "Perche la tua mano nella mia e pace.",
+            "Perche il tuo buonumore contagia.",
+            "Perche quando mi guardi capisco tutto.",
+            "Perche sai rendere leggera l'attesa.",
+            "Perche con te anche la pioggia e romantica.",
+            "Perche mi fai sentire orgoglioso di noi.",
+            "Perche hai una gentilezza che resta.",
+            "Perche condividi i miei valori.",
+            "Perche sai credere in me anche prima di me.",
+            "Perche con te ho imparato ad amare meglio.",
+            "Perche mi fai sentire vivo.",
+            "Perche il tuo bacio e sempre casa.",
+            "Perche sai dirmi la verita con amore.",
+            "Perche mi fai sorridere senza motivo.",
+            "Perche sai costruire, non solo sognare.",
+            "Perche con te posso immaginare ogni domani.",
+            "Perche trasformi i problemi in squadra.",
+            "Perche mi fai sentire scelto.",
+            "Perche sei la parte piu bella delle mie giornate.",
+            "Perche con te anche i minuti contano.",
+            "Perche mi fai sentire in pace.",
+            "Perche ami con delicatezza.",
+            "Perche sai rendere grande cio che e semplice.",
+            "Perche con te mi sento completo.",
+            "Perche ogni volta che ti penso sorrido.",
+            "Perche sei il mio posto felice.",
+            "Perche insieme a te tutto ha piu colore.",
+            "Perche ti amo, oggi piu di ieri."
+        ];
+
+        const overlay = document.getElementById("intro-overlay");
+        const loginBox = document.getElementById("login-box");
+        const loginForm = document.getElementById("login-form");
+        const dayInput = document.getElementById("day-input");
+        const monthInput = document.getElementById("month-input");
+        const yearInput = document.getElementById("year-input");
+        const mainApp = document.getElementById("main-app");
+        const msg = document.getElementById("access-msg");
+        const bgMusic = document.getElementById("bg-music");
+        const musicToggle = document.getElementById("music-toggle");
+        const audioHint = document.getElementById("audio-hint");
+        const noteCounter = document.getElementById("love-note-counter");
+        const noteText = document.getElementById("love-note-text");
+        const newNoteButton = document.getElementById("new-note-button");
+
+        let mapInitialized = false;
+        let musicStarted = false;
+        let reasonDeck = [];
+        let cyclePosition = 0;
+        let isTypingReason = false;
+        let typewriterTimeoutId = null;
+        let isLetterDataReady = true;
+
+        function createFloatingHearts() {
+            const heartContainer = document.getElementById("bg-hearts");
+            for (let i = 0; i < HEART_COUNT; i++) {
+                const heart = document.createElement("div");
+                heart.className = "heart-bg";
+                heart.innerHTML = "&#10084;";
+                heart.style.left = `${Math.random() * 100}%`;
+                heart.style.animationDuration = `${10 + Math.random() * 9}s`;
+                heart.style.animationDelay = `${Math.random() * 8}s`;
+                heart.style.fontSize = `${1.1 + Math.random() * 1.8}rem`;
+                heartContainer.appendChild(heart);
+            }
+        }
+
+        function sanitizeDigits(value, maxLen) {
+            return value.replace(/\D/g, "").slice(0, maxLen);
+        }
+
+        function setupDateInputs() {
+            const fields = [
+                { element: dayInput, maxLen: 2, next: monthInput, prev: null },
+                { element: monthInput, maxLen: 2, next: yearInput, prev: dayInput },
+                { element: yearInput, maxLen: 4, next: null, prev: monthInput }
+            ];
+
+            fields.forEach(({ element, maxLen, next, prev }) => {
+                element.addEventListener("input", () => {
+                    element.value = sanitizeDigits(element.value, maxLen);
+                    if (element.value.length === maxLen && next) {
+                        next.focus();
+                        next.select();
+                    }
+                });
+
+                element.addEventListener("keydown", (event) => {
+                    if (event.key === "Backspace" && element.value.length === 0 && prev) {
+                        prev.focus();
+                    }
+                });
+            });
+
+            loginForm.addEventListener("paste", (event) => {
+                const pasted = (event.clipboardData || window.clipboardData).getData("text");
+                const match = pasted.match(/(\d{2})\D?(\d{2})\D?(\d{2,4})/);
+                if (!match) {
+                    return;
+                }
+                event.preventDefault();
+                dayInput.value = match[1];
+                monthInput.value = match[2];
+                yearInput.value = match[3].length === 2 ? `20${match[3]}` : match[3];
+                yearInput.focus();
+            });
+        }
+
+        function buildDateValue() {
+            const day = sanitizeDigits(dayInput.value, 2).padStart(2, "0");
+            const month = sanitizeDigits(monthInput.value, 2).padStart(2, "0");
+            let year = sanitizeDigits(yearInput.value, 4);
+            if (year.length === 2) {
+                year = `20${year}`;
+            }
+            return { day, month, year };
+        }
+
+        function clearDateInputs() {
+            dayInput.value = "";
+            monthInput.value = "";
+            yearInput.value = "";
+            dayInput.focus();
+        }
+
+        function updateMusicButtonText() {
+            musicToggle.textContent = bgMusic.paused ? "Riprendi musica" : "Pausa musica";
+        }
+
+        async function startMusic() {
+            try {
+                await bgMusic.play();
+                musicStarted = true;
+                musicToggle.classList.remove("hidden");
+                audioHint.classList.add("hidden");
+                updateMusicButtonText();
+                return true;
+            } catch (error) {
+                audioHint.classList.remove("hidden");
+                return false;
+            }
+        }
+
+        function setupMusic() {
+            bgMusic.volume = MUSIC_VOLUME;
+            startMusic();
+
+            const tryUnlockMusic = () => {
+                if (!musicStarted) {
+                    startMusic();
+                }
+            };
+
+            ["click", "keydown", "touchstart"].forEach((eventName) => {
+                document.addEventListener(eventName, tryUnlockMusic, { once: true });
+            });
+
+            musicToggle.addEventListener("click", async () => {
+                if (bgMusic.paused) {
+                    await startMusic();
+                } else {
+                    bgMusic.pause();
+                    updateMusicButtonText();
+                }
+            });
+        }
+
+        function attemptLogin() {
+            const enteredDate = buildDateValue();
+            const isCorrectDate = enteredDate.day === SECRET_DATE.day
+                && enteredDate.month === SECRET_DATE.month
+                && enteredDate.year === SECRET_DATE.year;
+
+            if (!isCorrectDate) {
+                msg.textContent = "Data errata, ti tiro un pugnooo";
+                msg.className = "access-denied";
+                loginBox.classList.add("shake");
+                setTimeout(() => loginBox.classList.remove("shake"), 400);
+                clearDateInputs();
+                return;
+            }
+
+            msg.innerHTML = "Ti amo &#10084; Sto caricando...";
+            msg.className = "access-granted";
+            startMusic();
+
+            setTimeout(() => {
+                overlay.classList.add("fade-out");
+                setTimeout(() => {
+                    overlay.style.display = "none";
+                    mainApp.classList.remove("hidden");
+                    mainApp.removeAttribute("aria-hidden");
+                    requestAnimationFrame(() => mainApp.classList.add("visible"));
+                    initMap();
+                }, 850);
+            }, 1200);
+        }
+
+        loginForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            attemptLogin();
+        });
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const randomIndex = Math.floor(Math.random() * (i + 1));
+                [array[i], array[randomIndex]] = [array[randomIndex], array[i]];
+            }
+        }
+
+        function refillReasonDeck() {
+            reasonDeck = Array.from({ length: LOVE_REASONS.length }, (_, index) => index);
+            shuffleArray(reasonDeck);
+            cyclePosition = 0;
+        }
+
+        function showLetterFallback() {
+            isLetterDataReady = false;
+            noteCounter.textContent = "Motivo - di 100";
+            noteText.textContent = "Sto preparando i motivi...";
+            newNoteButton.disabled = true;
+        }
+
+        function writeReasonWithTypewriter(reason) {
+            if (typewriterTimeoutId !== null) {
+                clearTimeout(typewriterTimeoutId);
+                typewriterTimeoutId = null;
+            }
+
+            isTypingReason = true;
+            newNoteButton.disabled = true;
+            noteText.textContent = "";
+
+            if (!reason) {
+                isTypingReason = false;
+                newNoteButton.disabled = false;
+                return;
+            }
+
+            let cursor = 0;
+            const typeNext = () => {
+                noteText.textContent += reason.charAt(cursor);
+                cursor += 1;
+
+                if (cursor < reason.length) {
+                    typewriterTimeoutId = setTimeout(typeNext, TYPEWRITER_DELAY_MS);
+                    return;
+                }
+
+                typewriterTimeoutId = null;
+                isTypingReason = false;
+                newNoteButton.disabled = false;
+            };
+
+            typeNext();
+        }
+
+        function showNextLoveReason() {
+            if (!isLetterDataReady || isTypingReason) {
+                return;
+            }
+
+            if (reasonDeck.length === 0) {
+                refillReasonDeck();
+            }
+
+            const reasonIndex = reasonDeck.pop();
+            cyclePosition += 1;
+
+            noteCounter.textContent = `Motivo ${cyclePosition} di ${LOVE_REASONS.length}`;
+            writeReasonWithTypewriter(LOVE_REASONS[reasonIndex]);
+        }
+
+        function initLoveLetter() {
+            if (!Array.isArray(LOVE_REASONS) || LOVE_REASONS.length !== 100) {
+                const foundLength = Array.isArray(LOVE_REASONS) ? LOVE_REASONS.length : "invalid";
+                console.error(`LOVE_REASONS must contain exactly 100 items. Found: ${foundLength}`);
+                showLetterFallback();
+                return;
+            }
+
+            isLetterDataReady = true;
+            refillReasonDeck();
+            showNextLoveReason();
+        }
+
+        newNoteButton.addEventListener("click", showNextLoveReason);
+
+        function updateTimer() {
+            const now = new Date();
+            const diff = now - START_DATE;
+            document.getElementById("days").textContent = Math.floor(diff / (1000 * 60 * 60 * 24));
+            document.getElementById("hours").textContent = Math.floor((diff / (1000 * 60 * 60)) % 24).toString().padStart(2, "0");
+            document.getElementById("minutes").textContent = Math.floor((diff / 1000 / 60) % 60).toString().padStart(2, "0");
+            document.getElementById("seconds").textContent = Math.floor((diff / 1000) % 60).toString().padStart(2, "0");
+        }
+
+        setInterval(updateTimer, 1000);
+        updateTimer();
+
+        function initMap() {
+            if (mapInitialized) {
+                return;
+            }
+            mapInitialized = true;
+
+            const map = L.map("map", { scrollWheelZoom: false }).setView([45, 12], 4);
+
+            L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+                attribution: "&copy; OpenStreetMap &copy; CARTO",
+                maxZoom: 20
+            }).addTo(map);
+
+            const latlngs = [];
+
+            memories.forEach((mem) => {
+                latlngs.push(mem.coords);
+
+                const heartClass = mem.isFuture ? "heart-icon future" : "heart-icon";
+                const customIcon = L.divIcon({
+                    className: "custom-heart-marker",
+                    html: `<div class="${heartClass}">&#10084;</div>`,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+
+                const marker = L.marker(mem.coords, { icon: customIcon }).addTo(map);
+                const popupContent = `
+                    <div class="memory-popup">
+                        <h3>${mem.title}</h3>
+                        <img src="${mem.img}" alt="${mem.title}">
+                        <p>${mem.desc}</p>
+                    </div>
+                `;
+                marker.bindPopup(popupContent);
+            });
+
+            const polyline = L.polyline(latlngs, {
+                color: "#e91e63",
+                weight: 3,
+                opacity: 0.7
+            }).addTo(map);
+
+            map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+        }
+
+        createFloatingHearts();
+        setupDateInputs();
+        setupMusic();
+        initLoveLetter();
+    </script>
+</body>
+</html>
