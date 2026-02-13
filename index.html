@@ -1,0 +1,827 @@
+﻿<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Per Noi - San Valentino 2026</title>
+    <meta name="description" content="Una pagina speciale per San Valentino.">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Montserrat:wght@300;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <audio id="bg-music" loop preload="auto">
+        <source src="./assets/audio/musica.mp3" type="audio/mpeg">
+    </audio>
+    <button id="music-toggle" class="music-toggle hidden" type="button" aria-label="Controlla musica">Pausa musica</button>
+
+    <div class="bg-hearts" id="bg-hearts"></div>
+
+    <div id="intro-overlay">
+        <div class="login-box" id="login-box">
+            <div class="login-title">Benvenuta amore mio</div>
+            <p class="login-intro">Inserisci la nostra data speciale per entrare.</p>
+
+            <form id="login-form" novalidate>
+                <label class="date-label" for="day-input">Data di anniversario (GG/MM/AAAA)</label>
+                <div class="date-input-row" aria-label="Inserisci data speciale">
+                    <input type="text" id="day-input" maxlength="2" inputmode="numeric" autocomplete="off" placeholder="GG" aria-label="Giorno" autofocus>
+                    <span class="date-separator">/</span>
+                    <input type="text" id="month-input" maxlength="2" inputmode="numeric" autocomplete="off" placeholder="MM" aria-label="Mese">
+                    <span class="date-separator">/</span>
+                    <input type="text" id="year-input" maxlength="4" inputmode="numeric" autocomplete="off" placeholder="AAAA" aria-label="Anno">
+                </div>
+                <button id="login-button" type="submit">Entra</button>
+            </form>
+
+            <div id="access-msg" role="status" aria-live="polite"></div>
+            <p id="audio-hint" class="audio-hint hidden">Se la musica non parte da sola, tocca lo schermo</p>
+        </div>
+    </div>
+
+    <main id="main-app" class="hidden" aria-hidden="true">
+        <section class="mosaic-section">
+            <h2 class="section-title">Il Nostro Mosaico</h2>
+            <div class="mosaic-wrapper" id="mosaic-trigger" role="button" tabindex="0" aria-label="Apri il mosaico a schermo intero">
+                <img src="assets/images/mosaico_HD_4x.jpg" alt="Il nostro mosaico di ricordi">
+            </div>
+            <p class="mosaic-caption">Ogni pezzetto, un ricordo. Insieme, la nostra storia.</p>
+        </section>
+
+        <section class="hero-section">
+            <h1 class="main-title">La Durata della nostra Storia</h1>
+            <p class="subtitle">Ogni secondo è piu bello con te.</p>
+
+            <div id="timer-container" aria-label="Timer di coppia">
+                <div class="time-box"><span id="days" class="time-value">000</span><span class="time-label">Giorni</span></div>
+                <div class="time-box"><span id="hours" class="time-value">00</span><span class="time-label">Ore</span></div>
+                <div class="time-box"><span id="minutes" class="time-value">00</span><span class="time-label">Min</span></div>
+                <div class="time-box"><span id="seconds" class="time-value">00</span><span class="time-label">Sec</span></div>
+            </div>
+
+            <div class="love-note-card" aria-live="polite">
+                <h3 class="letter-title">100 motivi per cui ti amo</h3>
+                <p id="love-note-counter">Motivo 0 di 100</p>
+                <p id="love-note-text"></p>
+                <button id="new-note-button" type="button">Scopri un altro motivo</button>
+                <p class="letter-signature">Con amore, il tuo Michael</p>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="section-title">I Nostri Viaggi nel Mondo</h2>
+            <div class="map-wrapper">
+                <div id="map"></div>
+            </div>
+        </section>
+    </main>
+
+    <div id="mosaic-lightbox" class="mosaic-lightbox hidden" aria-hidden="true">
+        <button id="close-mosaic-zoom" class="mosaic-close-button" type="button" aria-label="Chiudi mosaico">Chiudi</button>
+        <div id="mosaic-zoom-viewport" class="mosaic-zoom-viewport">
+            <img id="mosaic-zoom-image" src="" alt="">
+        </div>
+        <p class="mosaic-lightbox-tip">Pinch per zoommare, trascina con un dito per muoverti.</p>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const SECRET_DATE = { day: "13", month: "04", year: "2024" };
+        const START_DATE = new Date("2024-04-13T00:00:00");
+        const HEART_COUNT = 18;
+        const MUSIC_VOLUME = 0.45;
+
+        const memories = [
+            { coords: [41.9028, 12.4964], title: "Roma", desc: "Dove mi sono innamorato di te.", img: "assets/images/foto_roma.jpg" },
+            { coords: [38.1157, 13.3615], title: "Palermo", desc: "Ti ricordi ancora le risate?", img: "assets/images/foto_palermo.jpg" },
+            { coords: [40.8518, 14.2681], title: "Napoli", desc: "Bei ricordi, ma una città che non fa per noi.", img: "assets/images/foto_napoli.jpg" },
+            { coords: [28.2916, -16.6291], title: "Tenerife", desc: "Arrivano i piratiii.", img: "assets/images/foto_tenerife.jpg" },
+            { coords: [37.4467, 25.3289], title: "Mykonos", desc: "Una delle città in cui o ti lasci o ti sposi.", img: "assets/images/foto_mykonos.jpg" },
+            { coords: [47.4979, 19.0402], title: "Budapest", desc: "Terme, Danubio e buon cibo.", img: "assets/images/foto_budapest.jpg" },
+            { coords: [52.3676, 4.9041], title: "Amsterdam", desc: "Prossima fermata!", img: "assets/images/foto_olanda.jpg", isFuture: true }
+        ];
+
+        const TYPEWRITER_DELAY_MS = 20;
+        const REASONS_DISPLAY_TOTAL = 100;
+        const LOVE_REASONS = [
+            "Perchè con te anche il lunedi ha un senso.",
+            "Perchè il tuo sorriso cambia la mia giornata.",
+            "Perchè mi fai sentire visto davvero.",
+            "Perchè sai ascoltarmi fino in fondo.",
+            "Perchè con te posso essere me stesso.",
+            "Perchè rendi leggere anche le cose difficili.",
+            "Perchè la tua voce mi calma subito.",
+            "Perchè mi fai ridere quando ne ho bisogno.",
+            "Perchè hai un cuore enorme.",
+            "Perchè mi sorprendi con piccoli gesti.",
+            "Perchè hai pazienza con i miei difetti.",
+            "Perchè credi in noi ogni giorno.",
+            "Perchè con te il tempo vola.",
+            "Perchè con te anche il silenzio è bello.",
+            "Perchè mi fai sentire a casa ovunque.",
+            "Perchè sai trasformare un giorno normale in un ricordo.",
+            "Perchè mi guardi con dolcezza.",
+            "Perchè rispetti i miei tempi.",
+            "Perchè mi incoraggi senza giudicarmi.",
+            "Perchè mi fai venire voglia di migliorare.",
+            "Perchè ogni tuo abbraccio e un rifugio.",
+            "Perchè sai essere forte e tenera insieme.",
+            "Perchè con te condivido tutto.",
+            "Perchè capisci i miei sguardi.",
+            "Perchè hai un modo unico di prenderti cura di me.",
+            "Perchè la tua energia mi accende.",
+            "Perchè la tua risata e la mia colonna sonora preferita.",
+            "Perchè sai trovare bellezza nelle cose semplici.",
+            "Perchè rendi speciale ogni caffe insieme.",
+            "Perchè con te i viaggi sono avventura vera.",
+            "Perchè anche fare la spesa con te e divertente.",
+            "Perchè ti emozioni per le cose giuste.",
+            "Perchè sai chiedere scusa con sincerita.",
+            "Perchè sai perdonare con il cuore.",
+            "Perchè mi fai sentire importante.",
+            "Perchè non smetti mai di sorprendermi.",
+            "Perchè con te i sogni sembrano possibili.",
+            "Perchè sei la mia persona preferita.",
+            "Perchè sai essere ironica al momento giusto.",
+            "Perchè mi fai sentire fortunato.",
+            "Perchè mi sostieni anche quando dubito.",
+            "Perchè ami con coraggio.",
+            "Perchè con te parlo di tutto senza paura.",
+            "Perchè mi fai sentire al sicuro.",
+            "Perchè hai una dolcezza rara.",
+            "Perchè sai anche farmi tornare con i piedi per terra.",
+            "Perchè hai occhi pieni di vita.",
+            "Perchè sai festeggiare ogni piccola vittoria.",
+            "Perchè con te il futuro mi piace di piu.",
+            "Perchè ogni giorno con te vale doppio.",
+            "Perchè sai mettere ordine nel mio caos.",
+            "Perchè non ti arrendi facilmente.",
+            "Perchè mi scegli ogni giorno.",
+            "Perchè sei presente davvero.",
+            "Perchè ami con profondita.",
+            "Perchè sai quando parlare e quando abbracciare.",
+            "Perchè mi fai sentire compreso.",
+            "Perchè con te posso ridere di me.",
+            "Perchè anche nei litigi cerchi sempre noi.",
+            "Perchè mi fai sentire migliore.",
+            "Perchè la tua sensibilita e preziosa.",
+            "Perchè hai una forza tranquilla.",
+            "Perchè sai rendere romantico l'ordinario.",
+            "Perchè con te ogni tramonto e piu bello.",
+            "Perchè sei curiosa della vita.",
+            "Perchè mi fai scoprire cose nuove.",
+            "Perchè mi fai sentire amato senza condizioni.",
+            "Perchè mi ispiri fiducia.",
+            "Perchè sei autentica.",
+            "Perchè sai prenderti cura anche dei dettagli.",
+            "Perchè con te i piani cambiano e migliorano.",
+            "Perchè mi fai venire voglia di tornare sempre da te.",
+            "Perchè la tua mano nella mia e pace.",
+            "Perchè il tuo buonumore contagia.",
+            "Perchè quando mi guardi capisco tutto.",
+            "Perchè sai rendere leggera l'attesa.",
+            "Perchè con te anche la pioggia e romantica.",
+            "Perchè mi fai sentire orgoglioso di noi.",
+            "Perchè hai una gentilezza che resta.",
+            "Perchè condividi i miei valori.",
+            "Perchè sai credere in me anche prima di me.",
+            "Perchè con te ho imparato ad amare meglio.",
+            "Perchè mi fai sentire vivo.",
+            "Perchè il tuo bacio e sempre casa.",
+            "Perchè sai dirmi la verita con amore.",
+            "Perchè mi fai sorridere senza motivo.",
+            "Perchè sai costruire, non solo sognare.",
+            "Perchè con te posso immaginare ogni domani.",
+            "Perchè trasformi i problemi in squadra.",
+            "Perchè mi fai sentire scelto.",
+            "Perchè sei la parte piu bella delle mie giornate.",
+            "Perchè con te anche i minuti contano.",
+            "Perchè mi fai sentire in pace.",
+            "Perchè ami con delicatezza.",
+            "Perchè sai rendere grande cio che e semplice.",
+            "Perchè con te mi sento completo.",
+            "Perchè ogni volta che ti penso sorrido.",
+            "Perchè sei il mio posto felice.",
+            "Perchè insieme a te tutto ha piu colore.",
+            "Perchè ti amo, oggi piu di ieri.",
+            "AAAAAAA, ho mentito, sono 101 motivi, Perchè ho scelto di avere fiducia in noi, TI AMO Fochina!"
+        ];
+        const BASE_REASON_TOTAL = Math.min(REASONS_DISPLAY_TOTAL, LOVE_REASONS.length);
+        const EASTER_EGG_INDEX = LOVE_REASONS.length > REASONS_DISPLAY_TOTAL ? LOVE_REASONS.length - 1 : -1;
+
+        const overlay = document.getElementById("intro-overlay");
+        const loginBox = document.getElementById("login-box");
+        const loginForm = document.getElementById("login-form");
+        const dayInput = document.getElementById("day-input");
+        const monthInput = document.getElementById("month-input");
+        const yearInput = document.getElementById("year-input");
+        const mainApp = document.getElementById("main-app");
+        const msg = document.getElementById("access-msg");
+        const bgMusic = document.getElementById("bg-music");
+        const musicToggle = document.getElementById("music-toggle");
+        const audioHint = document.getElementById("audio-hint");
+        const noteCounter = document.getElementById("love-note-counter");
+        const noteText = document.getElementById("love-note-text");
+        const newNoteButton = document.getElementById("new-note-button");
+        const mosaicTrigger = document.getElementById("mosaic-trigger");
+        const mosaicSourceImage = document.querySelector("#mosaic-trigger img");
+        const mosaicLightbox = document.getElementById("mosaic-lightbox");
+        const closeMosaicZoomButton = document.getElementById("close-mosaic-zoom");
+        const mosaicZoomViewport = document.getElementById("mosaic-zoom-viewport");
+        const mosaicZoomImage = document.getElementById("mosaic-zoom-image");
+
+        let mapInitialized = false;
+        let musicStarted = false;
+        let reasonPool = [];
+        let reasonNumber = 0;
+        let easterEggPending = EASTER_EGG_INDEX !== -1;
+        let showCascadeAfterEasterEgg = false;
+        let isTyping = false;
+        let typingTimeout = null;
+        let mosaicScale = 1;
+        let mosaicTranslateX = 0;
+        let mosaicTranslateY = 0;
+        let isMosaicPanning = false;
+        let panStartX = 0;
+        let panStartY = 0;
+        let pinchStartDistance = 0;
+        let pinchStartScale = 1;
+        let cinematicObserver = null;
+        const activeMosaicPointers = new Map();
+
+        function createFloatingHearts() {
+            const heartContainer = document.getElementById("bg-hearts");
+            for (let i = 0; i < HEART_COUNT; i++) {
+                const heart = document.createElement("div");
+                heart.className = "heart-bg";
+                heart.innerHTML = "&#10084;";
+                heart.style.left = `${Math.random() * 100}%`;
+                heart.style.animationDuration = `${10 + Math.random() * 9}s`;
+                heart.style.animationDelay = `${Math.random() * 8}s`;
+                heart.style.fontSize = `${1.1 + Math.random() * 1.8}rem`;
+                heartContainer.appendChild(heart);
+            }
+        }
+
+        function setupCinematicReveal() {
+            const sections = Array.from(mainApp.querySelectorAll("section"));
+            if (sections.length === 0) {
+                return;
+            }
+
+            sections.forEach((section, index) => {
+                section.classList.add("cinematic-section");
+                if (index === 0) {
+                    section.classList.add("in-view");
+                }
+            });
+
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) {
+                sections.forEach((section) => section.classList.add("in-view"));
+                return;
+            }
+
+            if (cinematicObserver) {
+                cinematicObserver.disconnect();
+            }
+
+            cinematicObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("in-view");
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, {
+                threshold: 0.22,
+                rootMargin: "0px 0px -12% 0px"
+            });
+
+            sections.slice(1).forEach((section) => cinematicObserver.observe(section));
+        }
+
+        function sanitizeDigits(value, maxLen) {
+            return value.replace(/\D/g, "").slice(0, maxLen);
+        }
+
+        function setupDateInputs() {
+            const fields = [
+                { element: dayInput, maxLen: 2, next: monthInput, prev: null },
+                { element: monthInput, maxLen: 2, next: yearInput, prev: dayInput },
+                { element: yearInput, maxLen: 4, next: null, prev: monthInput }
+            ];
+
+            fields.forEach(({ element, maxLen, next, prev }) => {
+                element.addEventListener("input", () => {
+                    element.value = sanitizeDigits(element.value, maxLen);
+                    if (element.value.length === maxLen && next) {
+                        next.focus();
+                        next.select();
+                    }
+                });
+
+                element.addEventListener("keydown", (event) => {
+                    if (event.key === "Backspace" && element.value.length === 0 && prev) {
+                        prev.focus();
+                    }
+                });
+            });
+
+            loginForm.addEventListener("paste", (event) => {
+                const pasted = (event.clipboardData || window.clipboardData).getData("text");
+                const match = pasted.match(/(\d{2})\D?(\d{2})\D?(\d{2,4})/);
+                if (!match) {
+                    return;
+                }
+                event.preventDefault();
+                dayInput.value = match[1];
+                monthInput.value = match[2];
+                yearInput.value = match[3].length === 2 ? `20${match[3]}` : match[3];
+                yearInput.focus();
+            });
+        }
+
+        function buildDateValue() {
+            const day = sanitizeDigits(dayInput.value, 2).padStart(2, "0");
+            const month = sanitizeDigits(monthInput.value, 2).padStart(2, "0");
+            let year = sanitizeDigits(yearInput.value, 4);
+            if (year.length === 2) {
+                year = `20${year}`;
+            }
+            return { day, month, year };
+        }
+
+        function clearDateInputs() {
+            dayInput.value = "";
+            monthInput.value = "";
+            yearInput.value = "";
+            dayInput.focus();
+        }
+
+        function updateMusicButtonText() {
+            musicToggle.textContent = bgMusic.paused ? "Riprendi musica" : "Pausa musica";
+        }
+
+        async function startMusic() {
+            try {
+                await bgMusic.play();
+                musicStarted = true;
+                musicToggle.classList.remove("hidden");
+                audioHint.classList.add("hidden");
+                updateMusicButtonText();
+                return true;
+            } catch (error) {
+                audioHint.classList.remove("hidden");
+                return false;
+            }
+        }
+
+        function setupMusic() {
+            bgMusic.volume = MUSIC_VOLUME;
+            startMusic();
+
+            const tryUnlockMusic = () => {
+                if (!musicStarted) {
+                    startMusic();
+                }
+            };
+
+            ["click", "keydown", "touchstart"].forEach((eventName) => {
+                document.addEventListener(eventName, tryUnlockMusic, { once: true });
+            });
+
+            musicToggle.addEventListener("click", async () => {
+                if (bgMusic.paused) {
+                    await startMusic();
+                } else {
+                    bgMusic.pause();
+                    updateMusicButtonText();
+                }
+            });
+        }
+
+        function attemptLogin() {
+            const enteredDate = buildDateValue();
+            const isCorrectDate = enteredDate.day === SECRET_DATE.day
+                && enteredDate.month === SECRET_DATE.month
+                && enteredDate.year === SECRET_DATE.year;
+
+            if (!isCorrectDate) {
+                msg.textContent = "Data errata, ti tiro un pugnooo";
+                msg.className = "access-denied";
+                loginBox.classList.add("shake");
+                setTimeout(() => loginBox.classList.remove("shake"), 400);
+                clearDateInputs();
+                return;
+            }
+
+            msg.innerHTML = "Ti amo &#10084; Caricamento in corso...";
+            msg.className = "access-granted";
+            startMusic();
+
+            setTimeout(() => {
+                overlay.classList.add("fade-out");
+                setTimeout(() => {
+                    overlay.style.display = "none";
+                    mainApp.classList.remove("hidden");
+                    mainApp.removeAttribute("aria-hidden");
+                    setupCinematicReveal();
+                    requestAnimationFrame(() => {
+                        mainApp.classList.add("visible");
+                    });
+                    initMap();
+                }, 850);
+            }, 1200);
+        }
+
+        loginForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            attemptLogin();
+        });
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const randomIndex = Math.floor(Math.random() * (i + 1));
+                [array[i], array[randomIndex]] = [array[randomIndex], array[i]];
+            }
+        }
+
+        function escapeHtml(value) {
+            return value
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        function showAllReasonsCascade() {
+            if (typingTimeout !== null) {
+                clearTimeout(typingTimeout);
+                typingTimeout = null;
+            }
+
+            isTyping = false;
+            newNoteButton.disabled = true;
+            noteText.classList.add("cascade-mode");
+
+            const maxDelayMs = 2200;
+            const stepDelayMs = 26;
+            const cascadeHtml = LOVE_REASONS
+                .map((reason, index) => {
+                    const delayMs = Math.min(index * stepDelayMs, maxDelayMs);
+                    return `<span class="reason-cascade-item" style="animation-delay: ${delayMs}ms">${escapeHtml(reason)}</span>`;
+                })
+                .join("");
+
+            noteText.innerHTML = cascadeHtml;
+            noteText.scrollTop = 0;
+        }
+
+        function refillReasonDeck() {
+            reasonPool = Array.from({ length: BASE_REASON_TOTAL }, (_, index) => index);
+            shuffleArray(reasonPool);
+            reasonNumber = 0;
+            easterEggPending = EASTER_EGG_INDEX !== -1;
+            showCascadeAfterEasterEgg = false;
+        }
+
+        function showReasonsFallback() {
+            noteCounter.textContent = "Motivo - di 100";
+            noteText.classList.remove("cascade-mode");
+            noteText.textContent = "Sto preparando i motivi...";
+            newNoteButton.disabled = true;
+        }
+
+        function typeReason(reason) {
+            if (typingTimeout !== null) {
+                clearTimeout(typingTimeout);
+                typingTimeout = null;
+            }
+
+            isTyping = true;
+            newNoteButton.disabled = true;
+            noteText.classList.remove("cascade-mode");
+            noteText.textContent = "";
+
+            if (!reason) {
+                isTyping = false;
+                newNoteButton.disabled = false;
+                return;
+            }
+
+            let cursor = 0;
+            const typeNext = () => {
+                noteText.textContent += reason.charAt(cursor);
+                cursor += 1;
+
+                if (cursor < reason.length) {
+                    typingTimeout = setTimeout(typeNext, TYPEWRITER_DELAY_MS);
+                    return;
+                }
+
+                typingTimeout = null;
+                isTyping = false;
+                newNoteButton.disabled = false;
+            };
+
+            typeNext();
+        }
+
+        function showNextReason() {
+            if (isTyping || newNoteButton.disabled) {
+                return;
+            }
+
+            if (showCascadeAfterEasterEgg) {
+                showCascadeAfterEasterEgg = false;
+                noteCounter.textContent = `Motivo ${REASONS_DISPLAY_TOTAL} di ${REASONS_DISPLAY_TOTAL}`;
+                showAllReasonsCascade();
+                return;
+            }
+
+            if (reasonPool.length === 0) {
+                if (easterEggPending && EASTER_EGG_INDEX !== -1) {
+                    easterEggPending = false;
+                    showCascadeAfterEasterEgg = true;
+                    noteCounter.textContent = `Motivo ${REASONS_DISPLAY_TOTAL} di ${REASONS_DISPLAY_TOTAL}`;
+                    typeReason(LOVE_REASONS[EASTER_EGG_INDEX]);
+                    return;
+                }
+                refillReasonDeck();
+            }
+
+            const reasonIndex = reasonPool.pop();
+            reasonNumber += 1;
+
+            noteCounter.textContent = `Motivo ${reasonNumber} di ${REASONS_DISPLAY_TOTAL}`;
+            typeReason(LOVE_REASONS[reasonIndex]);
+        }
+
+        function initReasonsLetter() {
+            if (!Array.isArray(LOVE_REASONS) || LOVE_REASONS.length === 0) {
+                const foundLength = Array.isArray(LOVE_REASONS) ? LOVE_REASONS.length : "invalid";
+                console.error(`LOVE_REASONS must contain at least 1 item. Found: ${foundLength}`);
+                showReasonsFallback();
+                return;
+            }
+
+            if (LOVE_REASONS.length < REASONS_DISPLAY_TOTAL) {
+                console.warn(`LOVE_REASONS expected at least ${REASONS_DISPLAY_TOTAL} items, found ${LOVE_REASONS.length}.`);
+            }
+
+            if (EASTER_EGG_INDEX !== -1) {
+                console.info("LOVE_REASONS easter egg enabled.");
+            }
+
+            refillReasonDeck();
+            showNextReason();
+        }
+
+        newNoteButton.addEventListener("click", showNextReason);
+
+        function clampValue(value, minValue, maxValue) {
+            return Math.min(maxValue, Math.max(minValue, value));
+        }
+
+        function getPinchDistance(pointA, pointB) {
+            const dx = pointA.x - pointB.x;
+            const dy = pointA.y - pointB.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function getMosaicPanLimits() {
+            const baseWidth = mosaicZoomImage.offsetWidth;
+            const baseHeight = mosaicZoomImage.offsetHeight;
+            const maxX = Math.max(0, (baseWidth * mosaicScale - baseWidth) / 2);
+            const maxY = Math.max(0, (baseHeight * mosaicScale - baseHeight) / 2);
+            return { maxX, maxY };
+        }
+
+        function applyMosaicTransform() {
+            if (mosaicScale <= 1) {
+                mosaicTranslateX = 0;
+                mosaicTranslateY = 0;
+            } else {
+                const { maxX, maxY } = getMosaicPanLimits();
+                mosaicTranslateX = clampValue(mosaicTranslateX, -maxX, maxX);
+                mosaicTranslateY = clampValue(mosaicTranslateY, -maxY, maxY);
+            }
+            mosaicZoomImage.style.transform = `translate(${mosaicTranslateX}px, ${mosaicTranslateY}px) scale(${mosaicScale})`;
+        }
+
+        function setMosaicScale(nextScale) {
+            mosaicScale = clampValue(nextScale, 1, 4);
+            applyMosaicTransform();
+        }
+
+        function resetMosaicZoomState() {
+            mosaicScale = 1;
+            mosaicTranslateX = 0;
+            mosaicTranslateY = 0;
+            isMosaicPanning = false;
+            activeMosaicPointers.clear();
+            applyMosaicTransform();
+        }
+
+        function openMosaicZoom() {
+            if (!mosaicSourceImage || !mosaicLightbox) {
+                return;
+            }
+
+            mosaicZoomImage.src = mosaicSourceImage.currentSrc || mosaicSourceImage.src;
+            mosaicZoomImage.alt = mosaicSourceImage.alt;
+            resetMosaicZoomState();
+
+            mosaicLightbox.classList.remove("hidden");
+            requestAnimationFrame(() => {
+                mosaicLightbox.classList.add("visible");
+                mosaicLightbox.setAttribute("aria-hidden", "false");
+            });
+            document.body.classList.add("lock-scroll");
+        }
+
+        function closeMosaicZoom() {
+            if (!mosaicLightbox || mosaicLightbox.classList.contains("hidden")) {
+                return;
+            }
+
+            mosaicLightbox.classList.remove("visible");
+            mosaicLightbox.setAttribute("aria-hidden", "true");
+            window.setTimeout(() => {
+                mosaicLightbox.classList.add("hidden");
+            }, 180);
+            document.body.classList.remove("lock-scroll");
+            resetMosaicZoomState();
+        }
+
+        function setupMosaicZoom() {
+            if (!mosaicTrigger || !mosaicLightbox || !mosaicZoomViewport || !mosaicZoomImage || !closeMosaicZoomButton) {
+                return;
+            }
+
+            mosaicTrigger.addEventListener("click", openMosaicZoom);
+            mosaicTrigger.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openMosaicZoom();
+                }
+            });
+
+            closeMosaicZoomButton.addEventListener("click", closeMosaicZoom);
+            mosaicLightbox.addEventListener("click", (event) => {
+                if (event.target === mosaicLightbox) {
+                    closeMosaicZoom();
+                }
+            });
+
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && mosaicLightbox.classList.contains("visible")) {
+                    closeMosaicZoom();
+                }
+            });
+
+            mosaicZoomViewport.addEventListener("wheel", (event) => {
+                event.preventDefault();
+                const step = event.deltaY < 0 ? 0.2 : -0.2;
+                setMosaicScale(mosaicScale + step);
+            }, { passive: false });
+
+            mosaicZoomViewport.addEventListener("dblclick", () => {
+                if (mosaicScale > 1) {
+                    setMosaicScale(1);
+                    return;
+                }
+                setMosaicScale(2);
+            });
+
+            mosaicZoomViewport.addEventListener("pointerdown", (event) => {
+                activeMosaicPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+                mosaicZoomViewport.setPointerCapture(event.pointerId);
+
+                if (activeMosaicPointers.size === 1) {
+                    isMosaicPanning = mosaicScale > 1;
+                    panStartX = event.clientX - mosaicTranslateX;
+                    panStartY = event.clientY - mosaicTranslateY;
+                }
+
+                if (activeMosaicPointers.size === 2) {
+                    const points = Array.from(activeMosaicPointers.values());
+                    pinchStartDistance = getPinchDistance(points[0], points[1]) || 1;
+                    pinchStartScale = mosaicScale;
+                    isMosaicPanning = false;
+                }
+            });
+
+            mosaicZoomViewport.addEventListener("pointermove", (event) => {
+                if (!activeMosaicPointers.has(event.pointerId)) {
+                    return;
+                }
+
+                activeMosaicPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+                if (activeMosaicPointers.size === 2) {
+                    event.preventDefault();
+                    const points = Array.from(activeMosaicPointers.values());
+                    const currentDistance = getPinchDistance(points[0], points[1]);
+                    const distanceRatio = currentDistance / (pinchStartDistance || 1);
+                    setMosaicScale(pinchStartScale * distanceRatio);
+                    return;
+                }
+
+                if (activeMosaicPointers.size === 1 && isMosaicPanning) {
+                    event.preventDefault();
+                    mosaicTranslateX = event.clientX - panStartX;
+                    mosaicTranslateY = event.clientY - panStartY;
+                    applyMosaicTransform();
+                }
+            });
+
+            const endPointerInteraction = (event) => {
+                if (activeMosaicPointers.has(event.pointerId)) {
+                    activeMosaicPointers.delete(event.pointerId);
+                }
+
+                if (activeMosaicPointers.size === 1) {
+                    const remainingPoint = Array.from(activeMosaicPointers.values())[0];
+                    isMosaicPanning = mosaicScale > 1;
+                    panStartX = remainingPoint.x - mosaicTranslateX;
+                    panStartY = remainingPoint.y - mosaicTranslateY;
+                } else {
+                    isMosaicPanning = false;
+                }
+            };
+
+            mosaicZoomViewport.addEventListener("pointerup", endPointerInteraction);
+            mosaicZoomViewport.addEventListener("pointercancel", endPointerInteraction);
+            mosaicZoomViewport.addEventListener("pointerleave", endPointerInteraction);
+        }
+
+        function updateTimer() {
+            const now = new Date();
+            const diff = now - START_DATE;
+            document.getElementById("days").textContent = Math.floor(diff / (1000 * 60 * 60 * 24));
+            document.getElementById("hours").textContent = Math.floor((diff / (1000 * 60 * 60)) % 24).toString().padStart(2, "0");
+            document.getElementById("minutes").textContent = Math.floor((diff / 1000 / 60) % 60).toString().padStart(2, "0");
+            document.getElementById("seconds").textContent = Math.floor((diff / 1000) % 60).toString().padStart(2, "0");
+        }
+
+        setInterval(updateTimer, 1000);
+        updateTimer();
+
+        function initMap() {
+            if (mapInitialized) {
+                return;
+            }
+            mapInitialized = true;
+
+            const map = L.map("map", { scrollWheelZoom: false }).setView([45, 12], 4);
+
+            L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+                attribution: "&copy; OpenStreetMap &copy; CARTO",
+                maxZoom: 20
+            }).addTo(map);
+
+            const latlngs = [];
+
+            memories.forEach((mem) => {
+                latlngs.push(mem.coords);
+
+                const heartClass = mem.isFuture ? "heart-icon future" : "heart-icon";
+                const customIcon = L.divIcon({
+                    className: "custom-heart-marker",
+                    html: `<div class="${heartClass}">&#10084;</div>`,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+
+                const marker = L.marker(mem.coords, { icon: customIcon }).addTo(map);
+                const popupContent = `
+                    <div class="memory-popup">
+                        <h3>${mem.title}</h3>
+                        <img src="${mem.img}" alt="${mem.title}">
+                        <p>${mem.desc}</p>
+                    </div>
+                `;
+                marker.bindPopup(popupContent);
+            });
+
+            const polyline = L.polyline(latlngs, {
+                color: "#e91e63",
+                weight: 3,
+                opacity: 0.7
+            }).addTo(map);
+
+            map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+        }
+
+        createFloatingHearts();
+        setupDateInputs();
+        setupMusic();
+        initReasonsLetter();
+        setupMosaicZoom();
+    </script>
+</body>
+</html>
+
